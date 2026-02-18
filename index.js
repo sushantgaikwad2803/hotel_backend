@@ -5,6 +5,7 @@ import dotenv from "dotenv";
 import fs from "fs";
 import { v2 as cloudinary } from "cloudinary";
 import { Food } from "./models/Food.js"; // make sure this path is correct
+import { Cart } from "./models/CartSchema.js";
 
 dotenv.config();
 
@@ -12,6 +13,7 @@ const app = express();
 const port = 1000;
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }))
 
 /* ==========================
    1️⃣ MongoDB Connection
@@ -101,6 +103,21 @@ app.get("/api/food", async (req, res) => {
         res.status(500).json({ message: error.message });
     }
 });
+
+app.get("/api/food/:name", async (req, res) => {
+
+
+    const name = req.body;
+    const data = await Food.findOne({ title: name })
+    if (!data) {
+        return res.json({ message: "no data found", success: false })
+    }
+
+    res.json({
+        data, success: true
+    })
+})
+
 
 
 /* -------- DELETE FOOD -------- */
