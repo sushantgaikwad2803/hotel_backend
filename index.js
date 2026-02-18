@@ -158,31 +158,29 @@ const app = express();
 const port = process.env.PORT || 1000;
 
 /* ==========================
-   ✅ CORS CONFIGURATION
+   ✅ MIDDLEWARE
 ========================== */
 
+// CORS (Express 5 Safe)
 app.use(cors({
   origin: "*",
   methods: ["GET", "POST", "PUT", "DELETE"],
   allowedHeaders: ["Content-Type"],
 }));
 
-app.options("*", cors());
-
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 /* ==========================
-   ✅ MongoDB Connection
+   ✅ DATABASE CONNECTION
 ========================== */
 
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("✅ MongoDB Connected"))
   .catch((err) => console.log("❌ MongoDB Error:", err.message));
 
-
 /* ==========================
-   ✅ Cloudinary Config
+   ✅ CLOUDINARY CONFIG
 ========================== */
 
 cloudinary.config({
@@ -191,15 +189,13 @@ cloudinary.config({
   api_secret: process.env.CLOUD_API_SECRET,
 });
 
-
 /* ==========================
-   ✅ Multer Setup
+   ✅ MULTER CONFIG
 ========================== */
 
 const upload = multer({
   dest: "uploads/",
 });
-
 
 /* ==========================
    ✅ ROUTES
@@ -207,9 +203,8 @@ const upload = multer({
 
 // Test Route
 app.get("/", (req, res) => {
-  res.json({ message: "🔥 Server running..." });
+  res.json({ message: "🔥 Server running successfully..." });
 });
-
 
 /* ==========================
    ✅ CREATE FOOD
@@ -224,15 +219,15 @@ app.post("/api/food", upload.single("image"), async (req, res) => {
     }
 
     // Upload image to Cloudinary
-    const result = await cloudinary.uploader.upload(req.file.path, {
+    const uploadResult = await cloudinary.uploader.upload(req.file.path, {
       folder: "foods",
     });
 
-    // Delete local file after upload
+    // Remove local file
     fs.unlinkSync(req.file.path);
 
     const newFood = await Food.create({
-      image: result.secure_url,
+      image: uploadResult.secure_url,
       title,
       desc,
       price,
@@ -255,7 +250,6 @@ app.post("/api/food", upload.single("image"), async (req, res) => {
   }
 });
 
-
 /* ==========================
    ✅ GET ALL FOOD
 ========================== */
@@ -263,12 +257,11 @@ app.post("/api/food", upload.single("image"), async (req, res) => {
 app.get("/api/food", async (req, res) => {
   try {
     const foods = await Food.find().sort({ createdAt: -1 });
-    res.json(foods);
+    res.status(200).json(foods);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
-
 
 /* ==========================
    ✅ GET FOOD BY TITLE
@@ -278,19 +271,24 @@ app.get("/api/food/:name", async (req, res) => {
   try {
     const name = req.params.name;
 
-    const data = await Food.findOne({ title: name });
+    const food = await Food.findOne({ title: name });
 
-    if (!data) {
-      return res.json({ message: "No data found", success: false });
+    if (!food) {
+      return res.status(404).json({
+        success: false,
+        message: "Food not found",
+      });
     }
 
-    res.json({ data, success: true });
+    res.json({
+      success: true,
+      data: food,
+    });
 
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
 });
-
 
 /* ==========================
    ✅ DELETE FOOD
@@ -304,7 +302,6 @@ app.delete("/api/food/:id", async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
-
 
 /* ==========================
    ✅ START SERVER
