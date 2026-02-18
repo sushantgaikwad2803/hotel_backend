@@ -164,6 +164,15 @@ app.delete("/api/food/:id", async (req, res) => {
    ✅ START SERVER
 ========================== */
 
+app.post("/api/cart", async (req, res) => {
+    const { table, items } = req.body
+    if (!table || !items) {
+        return res.json({ message: "all fields are required ", success: false })
+    }
+    const data = await Cart.create({ table, items });
+    res.json({ data })
+})
+
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
 });
