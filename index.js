@@ -70,10 +70,17 @@ app.get("/", (req, res) => {
 
 app.post("/api/food", upload.single("image"), async (req, res) => {
   try {
-    const { title, desc, price, rating, qty, available, category } = req.body;
+    console.log("BODY:", req.body);
+    console.log("HOTEL ID RECEIVED:", req.body.hotelId);
+
+    const { title, desc, price, rating, available, category, hotelId } = req.body;
 
     if (!req.file) {
       return res.status(400).json({ message: "Image is required" });
+    }
+
+    if (!hotelId) {
+      return res.status(400).json({ message: "Hotel ID is required" });
     }
 
     // Upload image to Cloudinary
@@ -81,19 +88,30 @@ app.post("/api/food", upload.single("image"), async (req, res) => {
       folder: "foods",
     });
 
-    // Remove local file
     fs.unlinkSync(req.file.path);
 
+    // const newFood = await Food.create({
+    //   hotelId,  
+    //   image: uploadResult.secure_url,
+    //   title,
+    //   desc,
+    //   price,
+    //   rating,
+    //   category,
+    //   available,
+    // });
+
     const newFood = await Food.create({
+      hotel: hotelId,   // ✅ FIXED
       image: uploadResult.secure_url,
       title,
       desc,
       price,
       rating,
-    //   qty,
       category,
       available,
     });
+    
 
     res.status(201).json({
       success: true,
