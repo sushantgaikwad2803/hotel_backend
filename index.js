@@ -7,6 +7,8 @@ import cors from "cors";
 import { v2 as cloudinary } from "cloudinary";
 import { Food } from "./models/Food.js";
 import { Cart } from "./models/CartSchema.js";
+import bcrypt from "bcryptjs";
+import { Hotel } from "./models/Hotel.js";
 
 dotenv.config();
 
@@ -160,6 +162,28 @@ app.delete("/api/food/:id", async (req, res) => {
   }
 });
 
+
+// Toggle food availability
+app.put("/api/food/:id/toggle", async (req, res) => {
+  try {
+    const food = await Food.findById(req.params.id);
+    if (!food) {
+      return res.status(404).json({ success: false, message: "Food not found" });
+    }
+
+    // Toggle available
+    food.available = !food.available;
+    await food.save();
+
+    res.json({ success: true, data: food });
+  } catch (error) {
+    console.error("TOGGLE FOOD ERROR:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+
+
 /* ==========================
    ✅ START SERVER
 ========================== */
@@ -175,4 +199,171 @@ app.post("/api/cart", async (req, res) => {
 
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);
+});
+
+
+/* ==========================
+   ✅ HOTEL REGISTRATION API
+========================== */
+
+app.post("/api/hotel/signup", upload.single("hotelImage"), async (req, res) => {
+  try {
+    // 1. Extract data from body
+    const { hotelName, email, password, address, city, state, tableCount } = req.body;
+
+    // 2. Validation Check (Prevents the 'toLowerCase' crash)
+    if (!hotelName || !email || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "Required fields (hotelName, email, password) are missing." 
+      });
+    }
+
+    // 3. Check if hotel already exists
+    const existingHotel = await Hotel.findOne({ email: email.toLowerCase() });
+    if (existingHotel) {
+      return res.status(400).json({ success: false, message: "Email already registered" });
+    }
+
+    // 4. Handle Image Upload
+    let imageUrl = "";
+    if (req.file) {
+      const uploadResult = await cloudinary.uploader.upload(req.file.path, {
+        folder: "hotels",
+      });
+      imageUrl = uploadResult.secure_url;
+      fs.unlinkSync(req.file.path); 
+    }
+
+    // 5. Secure Password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // 6. Save to Database
+    const newHotel = await Hotel.create({
+      hotelName,
+      email: email.toLowerCase(),
+      password: hashedPassword,
+      address,
+      city,
+      state,
+      tableCount: Number(tableCount) || 1,
+      hotelImage: imageUrl,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Hotel registered successfully!",
+      data: { id: newHotel._id, hotelName: newHotel.hotelName },
+    });
+  } catch (error) {
+    console.error("HOTEL SIGNUP ERROR:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
+});
+
+
+/* ==========================
+   ✅ GET ALL HOTELS
+========================== */
+app.get("/api/hotels", async (req, res) => {
+  try {
+    // Find all hotels but don't send the password field for security
+    const hotels = await Hotel.find().select("-password").sort({ createdAt: -1 });
+    
+    res.status(200).json({
+      success: true,
+      count: hotels.length,
+      data: hotels
+    });
+  } catch (error) {
+    console.error("GET HOTELS ERROR:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+
+app.put("/api/hotel/:id", upload.single("hotelImage"), async (req, res) => {
+  try {
+    const hotelId = req.params.id;
+    const updateData = { ...req.body };
+
+    // Convert tableCount to number
+    if (updateData.tableCount) {
+      updateData.tableCount = Number(updateData.tableCount);
+    }
+
+    // Handle new image if uploaded
+    if (req.file) {
+      const uploadResult = await cloudinary.uploader.upload(req.file.path, {
+        folder: "hotels",
+      });
+      updateData.hotelImage = uploadResult.secure_url;
+      fs.unlinkSync(req.file.path);
+    }
+
+    // Update hotel
+    const updatedHotel = await Hotel.findByIdAndUpdate(
+      hotelId,
+      updateData,
+      { new: true } // return updated document
+    ).select("-password");
+
+    if (!updatedHotel) {
+      return res.status(404).json({ success: false, message: "Hotel not found" });
+    }
+
+    res.json({ success: true, data: updatedHotel });
+
+  } catch (error) {
+    console.error("UPDATE HOTEL ERROR:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+
+
+/* ==========================
+    ✅ HOTEL LOGIN API
+========================== */
+app.post("/api/hotel/login", async (req, res) => {
+  try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: "Email and password are required" });
+    }
+
+    // 1. Find the hotel
+    const hotel = await Hotel.findOne({ email: email.toLowerCase() });
+    if (!hotel) {
+      return res.status(404).json({ success: false, message: "Hotel not found" });
+    }
+
+    // 2. Compare hashed password
+    const isMatch = await bcrypt.compare(password, hotel.password);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, message: "Invalid credentials" });
+    }
+
+    // 3. Send back hotel data
+    res.status(200).json({
+      success: true,
+      message: `Welcome back, ${hotel.hotelName}!`,
+      data: {
+        id: hotel._id,
+        hotelName: hotel.hotelName,
+        email: hotel.email,
+        address: hotel.address, 
+        city: hotel.city,       
+        state: hotel.state,     
+        tableCount: hotel.tableCount,
+        hotelImage: hotel.hotelImage
+      }
+    });
+
+  } catch (error) {
+    console.error("LOGIN ERROR:", error);
+    res.status(500).json({ success: false, message: "Internal Server Error" });
+  }
 });
