@@ -131,14 +131,19 @@ app.post("/api/food", upload.single("image"), async (req, res) => {
    ✅ GET ALL FOOD
 ========================== */
 
-app.get("/api/food", async (req, res) => {
+// Get foods by hotelId
+app.get("/api/food/:hotelId", async (req, res) => {
   try {
-    const foods = await Food.find().sort({ createdAt: -1 });
-    res.status(200).json(foods);
+    const { hotelId } = req.params;
+
+    const foods = await Food.find({ hotelId });
+
+    res.json({ success: true, foods });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(500).json({ success: false, message: "Server error" });
   }
 });
+
 
 /* ==========================
    ✅ GET FOOD BY TITLE
