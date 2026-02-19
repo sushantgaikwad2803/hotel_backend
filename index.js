@@ -369,15 +369,16 @@ app.post("/api/hotel/login", async (req, res) => {
       success: true,
       message: `Welcome back, ${hotel.hotelName}!`,
       data: {
-        id: hotel._id,
+        _id: hotel._id,   // 🔥 change here
         hotelName: hotel.hotelName,
         email: hotel.email,
-        address: hotel.address, 
-        city: hotel.city,       
-        state: hotel.state,     
+        address: hotel.address,
+        city: hotel.city,
+        state: hotel.state,
         tableCount: hotel.tableCount,
         hotelImage: hotel.hotelImage
       }
+      
     });
 
   } catch (error) {
