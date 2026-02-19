@@ -90,17 +90,6 @@ app.post("/api/food", upload.single("image"), async (req, res) => {
 
     fs.unlinkSync(req.file.path);
 
-    // const newFood = await Food.create({
-    //   hotelId,  
-    //   image: uploadResult.secure_url,
-    //   title,
-    //   desc,
-    //   price,
-    //   rating,
-    //   category,
-    //   available,
-    // });
-
     const newFood = await Food.create({
       hotel: hotelId,   // ✅ FIXED
       image: uploadResult.secure_url,
@@ -131,13 +120,10 @@ app.post("/api/food", upload.single("image"), async (req, res) => {
    ✅ GET ALL FOOD
 ========================== */
 
-// Get foods by hotelId
-app.get("/api/food/:hotelId", async (req, res) => {
+// Get foods by hotel
+app.get("/api/food/hotel/:hotelId", async (req, res) => {
   try {
-    const { hotelId } = req.params;
-
-    const foods = await Food.find({ hotelId });
-
+    const foods = await Food.find({ hotel: req.params.hotelId });
     res.json({ success: true, foods });
   } catch (error) {
     res.status(500).json({ success: false, message: "Server error" });
@@ -149,28 +135,28 @@ app.get("/api/food/:hotelId", async (req, res) => {
    ✅ GET FOOD BY TITLE
 ========================== */
 
-app.get("/api/food/:name", async (req, res) => {
-  try {
-    const name = req.params.name;
+// app.get("/api/food/:name", async (req, res) => {
+//   try {
+//     const name = req.params.name;
 
-    const food = await Food.findOne({ title: name });
+//     const food = await Food.findOne({ title: name });
 
-    if (!food) {
-      return res.status(404).json({
-        success: false,
-        message: "Food not found",
-      });
-    }
+//     if (!food) {
+//       return res.status(404).json({
+//         success: false,
+//         message: "Food not found",
+//       });
+//     }
 
-    res.json({
-      success: true,
-      data: food,
-    });
+//     res.json({
+//       success: true,
+//       data: food,
+//     });
 
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-});
+//   } catch (error) {
+//     res.status(500).json({ message: error.message });
+//   }
+// });
 
 /* ==========================
    ✅ DELETE FOOD
