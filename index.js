@@ -298,7 +298,7 @@ app.post("/api/bookings/place-order", async (req, res) => {
       // Add new items to existing booking
       items.forEach(item => {
         const existing = booking.orders.find(
-          o => o.title === item.title
+          o => o.foodId === item.foodId
         );
 
         if (existing) {
@@ -343,6 +343,16 @@ app.get("/api/bookings/:hotelId", async (req, res) => {
   } catch (error) {
     res.status(500).json({ success: false });
   }
+});
+
+app.get("/api/bookings/:hotelId/:tableNumber", async (req, res) => {
+  const booking = await Booking.findOne({
+    hotelId: req.params.hotelId,
+    tableNumber: req.params.tableNumber,
+    status: "active"
+  });
+
+  res.json({ success: true, data: booking });
 });
 
 
