@@ -362,6 +362,47 @@ app.get("/api/bookings/:hotelId/:tableNumber", async (req, res) => {
   res.json({ success: true, data: booking });
 });
 
+app.put("/api/bookings/remove-item/:bookingId", async (req, res) => {
+  try {
+    const { foodId } = req.body;
+
+    const booking = await Booking.findById(req.params.bookingId);
+    if (!booking) {
+      return res.status(404).json({ success: false, message: "Booking not found" });
+    }
+
+    // 🔥 Convert both to string before comparing
+    const itemToRemove = booking.orders.find(
+      o => String(o.foodId) === String(foodId)
+    );
+
+    if (!itemToRemove) {
+      return res.status(404).json({ success: false, message: "Item not found" });
+    }
+
+    // subtract total
+    booking.totalAmount -= Number(itemToRemove.price) * Number(itemToRemove.quantity);
+
+    // remove item
+    booking.orders = booking.orders.filter(
+      o => String(o.foodId) !== String(foodId)
+    );
+
+    // if empty mark completed
+    if (booking.orders.length === 0) {
+      booking.status = "completed";
+    }
+
+    await booking.save();
+
+    res.json({ success: true, data: booking });
+
+  } catch (error) {
+    console.log("Remove Item Error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
 
 // COMPLETE DINNER
 app.put("/api/bookings/complete/:id", async (req, res) => {
