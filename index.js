@@ -284,47 +284,17 @@ app.post("/api/bookings/place-order", async (req, res) => {
       });
     }
 
-    const tableNo = Number(tableNumber);
-
-    let booking = await Booking.findOne({
-      hotelId,
-      tableNumber: tableNo,
-      status: "active"
-    });
-
-    const newAmount = items.reduce(
+    const totalAmount = items.reduce(
       (sum, item) => sum + Number(item.price) * Number(item.quantity),
       0
     );
 
-    if (booking) {
-      items.forEach(item => {
-        const existing = booking.orders.find(
-          o => o.foodId === item.foodId
-        );
-
-        if (existing) {
-          existing.quantity += Number(item.quantity);
-        } else {
-          booking.orders.push({
-            ...item,
-            quantity: Number(item.quantity),
-            price: Number(item.price)
-          });
-        }
-      });
-
-      booking.totalAmount += newAmount;
-      await booking.save();
-
-      return res.json({ success: true, data: booking });
-    }
-
+    // ✅ ALWAYS CREATE NEW BOOKING
     const newBooking = await Booking.create({
       hotelId,
-      tableNumber: tableNo,
+      tableNumber: Number(tableNumber),
       orders: items,
-      totalAmount: newAmount,
+      totalAmount,
       status: "active"
     });
 
