@@ -337,28 +337,43 @@ app.put("/api/bookings/remove-item/:bookingId", async (req, res) => {
     const { foodId } = req.body;
 
     const booking = await Booking.findById(req.params.bookingId);
+
     if (!booking) {
-      return res.status(404).json({ success: false, message: "Booking not found" });
+      return res.status(404).json({
+        success: false,
+        message: "Booking not found"
+      });
     }
 
-    // 🔥 Convert both to string before comparing
-    const itemToRemove = booking.orders.find(
-      o => String(o.foodId) === String(foodId)
+    const item = booking.orders.find(
+      (o) => String(o.foodId) === String(foodId)
     );
 
-    if (!itemToRemove) {
-      return res.status(404).json({ success: false, message: "Item not found" });
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        message: "Item not found"
+      });
     }
 
-    // subtract total
-    booking.totalAmount -= Number(itemToRemove.price) * Number(itemToRemove.quantity);
+    // ✅ IF QUANTITY MORE THAN 1 → REDUCE ONLY 1
+    if (item.quantity > 1) {
+      item.quantity -= 1;
+    } else {
+      // ✅ IF ONLY 1 → REMOVE ITEM COMPLETELY
+      booking.orders = booking.orders.filter(
+        (o) => String(o.foodId) !== String(foodId)
+      );
+    }
 
-    // remove item
-    booking.orders = booking.orders.filter(
-      o => String(o.foodId) !== String(foodId)
+    // ✅ RECALCULATE TOTAL PROPERLY
+    booking.totalAmount = booking.orders.reduce(
+      (sum, order) =>
+        sum + Number(order.price) * Number(order.quantity),
+      0
     );
 
-    // if empty mark completed
+    // ✅ If no items left → mark completed
     if (booking.orders.length === 0) {
       booking.status = "completed";
     }
@@ -369,7 +384,10 @@ app.put("/api/bookings/remove-item/:bookingId", async (req, res) => {
 
   } catch (error) {
     console.log("Remove Item Error:", error);
-    res.status(500).json({ success: false, message: error.message });
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
   }
 });
 
@@ -389,6 +407,59 @@ app.put("/api/bookings/complete/:id", async (req, res) => {
     res.json({ success: true, data: booking });
 
   } catch (error) {
+    res.status(500).json({ success: false });
+  }
+});
+
+app.put("/api/bookings/update-quantity/:bookingId", async (req, res) => {
+  try {
+    const { foodId, action } = req.body; // action: "increase" or "decrease"
+
+    const booking = await Booking.findById(req.params.bookingId);
+
+    if (!booking) {
+      return res.status(404).json({ success: false });
+    }
+
+    const item = booking.orders.find(
+      (o) => String(o.foodId) === String(foodId)
+    );
+
+    if (!item) {
+      return res.status(404).json({ success: false });
+    }
+
+    if (action === "increase") {
+      item.quantity += 1;
+    }
+
+    if (action === "decrease") {
+      if (item.quantity > 1) {
+        item.quantity -= 1;
+      } else {
+        booking.orders = booking.orders.filter(
+          (o) => String(o.foodId) !== String(foodId)
+        );
+      }
+    }
+
+    // Recalculate total
+    booking.totalAmount = booking.orders.reduce(
+      (sum, order) =>
+        sum + Number(order.price) * Number(order.quantity),
+      0
+    );
+
+    if (booking.orders.length === 0) {
+      booking.status = "completed";
+    }
+
+    await booking.save();
+
+    res.json({ success: true, data: booking });
+
+  } catch (error) {
+    console.log(error);
     res.status(500).json({ success: false });
   }
 });
