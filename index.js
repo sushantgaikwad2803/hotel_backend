@@ -327,7 +327,7 @@ app.post("/api/bookings/place-order", async (req, res) => {
 app.get("/api/bookings/:hotelId", async (req, res) => {
   try {
     const bookings = await Booking.find({
-      hotelId: req.params.hotelId,
+      hotel: req.params.hotelId,   // ✅ FIXED
       status: "active"
     });
 
@@ -338,14 +338,21 @@ app.get("/api/bookings/:hotelId", async (req, res) => {
   }
 });
 
-app.get("/api/bookings/:hotelId/:tableNumber", async (req, res) => {
-  const booking = await Booking.findOne({
-    hotelId: req.params.hotelId,
-    tableNumber: req.params.tableNumber,
-    status: "active"
-  });
 
-  res.json({ success: true, data: booking });
+// GET BOOKING BY HOTEL + TABLE
+app.get("/api/bookings/:hotelId/:tableNumber", async (req, res) => {
+  try {
+    const booking = await Booking.findOne({
+      hotel: req.params.hotelId,  // ✅ FIXED
+      tableNumber: Number(req.params.tableNumber),
+      status: "active"
+    });
+
+    res.json({ success: true, data: booking });
+
+  } catch (error) {
+    res.status(500).json({ success: false });
+  }
 });
 
 app.put("/api/bookings/remove-item/:bookingId", async (req, res) => {
