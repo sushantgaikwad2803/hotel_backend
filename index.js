@@ -10,6 +10,7 @@ import bcrypt from "bcryptjs";
 import { Food } from "./models/Food.js";
 import { Cart } from "./models/CartSchema.js";
 import { Hotel } from "./models/Hotel.js";
+import Booking from "./models/Booking.js";
 
 dotenv.config();
 
@@ -283,28 +284,33 @@ app.post("/api/bookings/place-order", async (req, res) => {
       });
     }
 
+    const tableNo = Number(tableNumber);
+
     let booking = await Booking.findOne({
       hotelId,
-      tableNumber,
+      tableNumber: tableNo,
       status: "active"
     });
 
     const newAmount = items.reduce(
-      (sum, item) => sum + item.price * item.quantity,
+      (sum, item) => sum + Number(item.price) * Number(item.quantity),
       0
     );
 
     if (booking) {
-      // Add new items to existing booking
       items.forEach(item => {
         const existing = booking.orders.find(
           o => o.foodId === item.foodId
         );
 
         if (existing) {
-          existing.quantity += item.quantity;
+          existing.quantity += Number(item.quantity);
         } else {
-          booking.orders.push(item);
+          booking.orders.push({
+            ...item,
+            quantity: Number(item.quantity),
+            price: Number(item.price)
+          });
         }
       });
 
@@ -314,10 +320,9 @@ app.post("/api/bookings/place-order", async (req, res) => {
       return res.json({ success: true, data: booking });
     }
 
-    // Create new booking
     const newBooking = await Booking.create({
       hotelId,
-      tableNumber,
+      tableNumber: tableNo,
       orders: items,
       totalAmount: newAmount,
       status: "active"
@@ -326,6 +331,7 @@ app.post("/api/bookings/place-order", async (req, res) => {
     res.json({ success: true, data: newBooking });
 
   } catch (error) {
+    console.log("Booking Error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -335,7 +341,8 @@ app.post("/api/bookings/place-order", async (req, res) => {
 app.get("/api/bookings/:hotelId", async (req, res) => {
   try {
     const bookings = await Booking.find({
-      hotelId: req.params.hotelId
+      hotelId: req.params.hotelId,
+      status: "active"
     });
 
     res.json({ success: true, data: bookings });
