@@ -424,7 +424,7 @@ app.put("/api/bookings/complete/:id", async (req, res) => {
 });
 
 
-router.post("/place-order", async (req, res) => {
+app.post("/place-order", async (req, res) => {
   try {
     const { hotelId, tableNumber, items } = req.body;
 
