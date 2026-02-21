@@ -194,7 +194,7 @@ app.put("/api/hotel/:id", upload.single("hotelImage"), async (req, res) => {
 // CREATE FOOD
 app.post("/api/food", upload.single("image"), async (req, res) => {
   try {
-    const { title, desc, price, rating, category, available, hotelId } = req.body;
+    const { title, desc, price, starters, category, available, hotelId } = req.body;
 
     if (!req.file || !hotelId) {
       return res.status(400).json({ success: false, message: "Image & Hotel ID required" });
@@ -209,7 +209,7 @@ app.post("/api/food", upload.single("image"), async (req, res) => {
       title,
       desc,
       price,
-      rating,
+      starters,
       category,
       available,
     });

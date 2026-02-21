@@ -10,7 +10,7 @@ const foodSchema = new mongoose.Schema({
     title: { type: String, required: true },
     desc: { type: String, required: true },
     price: { type: Number, required: true },
-    rating: { type: Number, min: 0, max: 5, default: 0 },
+    starters: { type: String },
     category: { type: String },
     available: { type: Boolean, default: true },
 }, { timestamps: true });
