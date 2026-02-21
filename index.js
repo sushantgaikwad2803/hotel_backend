@@ -275,49 +275,63 @@ app.post("/api/cart", async (req, res) => {
 // PLACE ORDER
 app.post("/api/bookings/place-order", async (req, res) => {
   try {
-    const { hotelId, tableNumber, bookingId, items } = req.body;
+    const { hotelId, tableNumber, items } = req.body;
 
-    let booking;
-
-    if (bookingId) {
-      booking = await Booking.findById(bookingId);
-
-      if (!booking) {
-        return res.status(404).json({ success: false, message: "Booking not found" });
-      }
-
-      // 🔥 Add new items to existing booking
-      items.forEach(item => {
-        const existing = booking.orders.find(
-          o => String(o.foodId) === String(item.foodId)
-        );
-
-        if (existing) {
-          existing.quantity += item.quantity;
-        } else {
-          booking.orders.push(item);
-        }
-
-        booking.totalAmount += item.price * item.quantity;
-      });
-
-    } else {
-      // 🔥 Create new booking
-      booking = new Booking({
-        hotel: hotelId,
-        tableNumber,
-        orders: items,
-        totalAmount: items.reduce((sum, i) => sum + i.price * i.quantity, 0),
-        status: "active"
+    if (!hotelId || !tableNumber || !items?.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing data"
       });
     }
 
-    await booking.save();
+    const tableNo = Number(tableNumber);
 
-    res.json({ success: true, data: booking });
+    let booking = await Booking.findOne({
+      hotelId,
+      tableNumber: tableNo,
+      status: "active"
+    });
+
+    const newAmount = items.reduce(
+      (sum, item) => sum + Number(item.price) * Number(item.quantity),
+      0
+    );
+
+    if (booking) {
+      items.forEach(item => {
+        const existing = booking.orders.find(
+          o => o.foodId === item.foodId
+        );
+
+        if (existing) {
+          existing.quantity += Number(item.quantity);
+        } else {
+          booking.orders.push({
+            ...item,
+            quantity: Number(item.quantity),
+            price: Number(item.price)
+          });
+        }
+      });
+
+      booking.totalAmount += newAmount;
+      await booking.save();
+
+      return res.json({ success: true, data: booking });
+    }
+
+    const newBooking = await Booking.create({
+      hotelId,
+      tableNumber: tableNo,
+      orders: items,
+      totalAmount: newAmount,
+      status: "active"
+    });
+
+    res.json({ success: true, data: newBooking });
 
   } catch (error) {
-    console.log(error);
+    console.log("Booking Error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
@@ -327,7 +341,7 @@ app.post("/api/bookings/place-order", async (req, res) => {
 app.get("/api/bookings/:hotelId", async (req, res) => {
   try {
     const bookings = await Booking.find({
-      hotel: req.params.hotelId,   // ✅ FIXED
+      hotelId: req.params.hotelId,
       status: "active"
     });
 
@@ -338,21 +352,14 @@ app.get("/api/bookings/:hotelId", async (req, res) => {
   }
 });
 
-
-// GET BOOKING BY HOTEL + TABLE
 app.get("/api/bookings/:hotelId/:tableNumber", async (req, res) => {
-  try {
-    const booking = await Booking.findOne({
-      hotel: req.params.hotelId,  // ✅ FIXED
-      tableNumber: Number(req.params.tableNumber),
-      status: "active"
-    });
+  const booking = await Booking.findOne({
+    hotelId: req.params.hotelId,
+    tableNumber: req.params.tableNumber,
+    status: "active"
+  });
 
-    res.json({ success: true, data: booking });
-
-  } catch (error) {
-    res.status(500).json({ success: false });
-  }
+  res.json({ success: true, data: booking });
 });
 
 app.put("/api/bookings/remove-item/:bookingId", async (req, res) => {
