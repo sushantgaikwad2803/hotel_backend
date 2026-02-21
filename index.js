@@ -275,63 +275,49 @@ app.post("/api/cart", async (req, res) => {
 // PLACE ORDER
 app.post("/api/bookings/place-order", async (req, res) => {
   try {
-    const { hotelId, tableNumber, items } = req.body;
+    const { hotelId, tableNumber, bookingId, items } = req.body;
 
-    if (!hotelId || !tableNumber || !items?.length) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing data"
-      });
-    }
+    let booking;
 
-    const tableNo = Number(tableNumber);
+    if (bookingId) {
+      booking = await Booking.findById(bookingId);
 
-    let booking = await Booking.findOne({
-      hotelId,
-      tableNumber: tableNo,
-      status: "active"
-    });
+      if (!booking) {
+        return res.status(404).json({ success: false, message: "Booking not found" });
+      }
 
-    const newAmount = items.reduce(
-      (sum, item) => sum + Number(item.price) * Number(item.quantity),
-      0
-    );
-
-    if (booking) {
+      // 🔥 Add new items to existing booking
       items.forEach(item => {
         const existing = booking.orders.find(
-          o => o.foodId === item.foodId
+          o => String(o.foodId) === String(item.foodId)
         );
 
         if (existing) {
-          existing.quantity += Number(item.quantity);
+          existing.quantity += item.quantity;
         } else {
-          booking.orders.push({
-            ...item,
-            quantity: Number(item.quantity),
-            price: Number(item.price)
-          });
+          booking.orders.push(item);
         }
+
+        booking.totalAmount += item.price * item.quantity;
       });
 
-      booking.totalAmount += newAmount;
-      await booking.save();
-
-      return res.json({ success: true, data: booking });
+    } else {
+      // 🔥 Create new booking
+      booking = new Booking({
+        hotel: hotelId,
+        tableNumber,
+        orders: items,
+        totalAmount: items.reduce((sum, i) => sum + i.price * i.quantity, 0),
+        status: "active"
+      });
     }
 
-    const newBooking = await Booking.create({
-      hotelId,
-      tableNumber: tableNo,
-      orders: items,
-      totalAmount: newAmount,
-      status: "active"
-    });
+    await booking.save();
 
-    res.json({ success: true, data: newBooking });
+    res.json({ success: true, data: booking });
 
   } catch (error) {
-    console.log("Booking Error:", error);
+    console.log(error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
