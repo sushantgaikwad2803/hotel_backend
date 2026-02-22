@@ -10,9 +10,10 @@ const foodSchema = new mongoose.Schema({
     title: { type: String, required: true },
     desc: { type: String, required: true },
     price: { type: Number, required: true },
-    FoodCategory: { type: String },
+    foodCategory: { type: String },   // ✅ fixed
     category: { type: String },
     available: { type: Boolean, default: true },
 }, { timestamps: true });
+
 
 export const Food = mongoose.model("Food", foodSchema);
