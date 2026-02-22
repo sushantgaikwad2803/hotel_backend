@@ -17,6 +17,10 @@ const bookingSchema = new mongoose.Schema({
       title: String,
       price: Number,
       quantity: Number,
+      delivered: {
+        type: Boolean,
+        default: false
+      },
       orderedAt: {
         type: Date,
         default: Date.now

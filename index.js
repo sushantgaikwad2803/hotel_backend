@@ -464,6 +464,35 @@ app.put("/api/bookings/update-quantity/:bookingId", async (req, res) => {
   }
 });
 
+app.put("/api/bookings/deliver-item/:bookingId", async (req, res) => {
+  try {
+    const { foodId } = req.body;
+
+    const booking = await Booking.findById(req.params.bookingId);
+
+    if (!booking) {
+      return res.status(404).json({ success: false });
+    }
+
+    const item = booking.orders.find(
+      (o) => String(o.foodId) === String(foodId)
+    );
+
+    if (!item) {
+      return res.status(404).json({ success: false });
+    }
+
+    item.delivered = true;
+
+    await booking.save();
+
+    res.json({ success: true, data: booking });
+
+  } catch (error) {
+    res.status(500).json({ success: false });
+  }
+});
+
 /* =================================
    ✅ START SERVER (ALWAYS LAST)
 ================================= */
