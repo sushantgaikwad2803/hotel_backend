@@ -313,7 +313,8 @@ app.get("/api/bookings/:hotelId", async (req, res) => {
     const bookings = await Booking.find({
       hotelId: req.params.hotelId,
       status: "active"
-    });
+    })
+    .sort({ createdAt: -1 }); // ✅ NEWEST FIRST
 
     res.json({ success: true, data: bookings });
 
