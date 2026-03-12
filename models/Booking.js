@@ -1,44 +1,84 @@
+// import mongoose from "mongoose";
+
+// const bookingSchema = new mongoose.Schema({
+//   hotelId: {
+//     type: mongoose.Schema.Types.ObjectId,
+//     ref: "Hotel",
+//     required: true,
+//   },
+//   tableNumber: {
+//     type: Number,
+//     required: true,
+//   },
+
+//   orders: [
+//     {
+//       foodId: String,
+//       title: String,
+//       price: Number,
+//       quantity: Number,
+//       delivered: {
+//         type: Boolean,
+//         default: false
+//       },
+//       orderedAt: {
+//         type: Date,
+//         default: Date.now
+//       }
+//     }
+//   ],
+
+//   totalAmount: {
+//     type: Number,
+//     default: 0
+//   },
+
+//   status: {
+//     type: String,
+//     enum: ["active", "completed"],
+//     default: "active"
+//   }
+
+// }, { timestamps: true });
+
+// export default mongoose.model("Booking", bookingSchema);
+
 import mongoose from "mongoose";
 
-const bookingSchema = new mongoose.Schema({
-  hotelId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Hotel",
-    required: true,
+const orderSchema = new mongoose.Schema({
+  foodId: String,
+  title: String,
+  price: Number,
+  quantity: Number,
+  delivered: {
+    type: Boolean,
+    default: false
   },
-  tableNumber: {
-    type: Number,
-    required: true,
-  },
-
-  orders: [
-    {
-      foodId: String,
-      title: String,
-      price: Number,
-      quantity: Number,
-      delivered: {
-        type: Boolean,
-        default: false
-      },
-      orderedAt: {
-        type: Date,
-        default: Date.now
-      }
-    }
-  ],
-
-  totalAmount: {
-    type: Number,
-    default: 0
-  },
-
-  status: {
-    type: String,
-    enum: ["active", "completed"],
-    default: "active"
+  orderedAt: {
+    type: Date,
+    default: Date.now
   }
+});
 
-}, { timestamps: true });
+const bookingSchema = new mongoose.Schema(
+  {
+    hotelId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Hotel",
+      required: true
+    },
+    tableNumber: {
+      type: String,
+      required: true
+    },
+    orders: [orderSchema],
+    totalAmount: Number,
+    status: {
+      type: String,
+      default: "active"
+    }
+  },
+  { timestamps: true }
+);
 
 export default mongoose.model("Booking", bookingSchema);

@@ -59,20 +59,44 @@ app.get("/", (req, res) => {
 // REGISTER HOTEL
 app.post("/api/hotel/signup", upload.single("hotelImage"), async (req, res) => {
   try {
-    const { hotelName, email, password, address, city, state, tableCount } = req.body;
+    const { hotelName, email, password, address, city, state, hotelType } = req.body;
 
-    if (!hotelName || !email || !password) {
-      return res.status(400).json({ success: false, message: "Required fields missing" });
+    let sections = [];
+
+    if (req.body.sections) {
+      try {
+        sections = JSON.parse(req.body.sections);
+      } catch (error) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid sections format"
+        });
+      }
+    }
+
+    if (!hotelName || !email || !password || !hotelType) {
+      return res.status(400).json({
+        success: false,
+        message: "Required fields missing"
+      });
     }
 
     const existingHotel = await Hotel.findOne({ email: email.toLowerCase() });
+
     if (existingHotel) {
-      return res.status(400).json({ success: false, message: "Email already registered" });
+      return res.status(400).json({
+        success: false,
+        message: "Email already registered"
+      });
     }
 
     let imageUrl = "";
+
     if (req.file) {
-      const uploadResult = await cloudinary.uploader.upload(req.file.path, { folder: "hotels" });
+      const uploadResult = await cloudinary.uploader.upload(req.file.path, {
+        folder: "hotels"
+      });
+
       imageUrl = uploadResult.secure_url;
       fs.unlinkSync(req.file.path);
     }
@@ -83,19 +107,20 @@ app.post("/api/hotel/signup", upload.single("hotelImage"), async (req, res) => {
       hotelName,
       email: email.toLowerCase(),
       password: hashedPassword,
+      hotelType,
       address,
       city,
       state,
-      tableCount: Number(tableCount) || 1,
-      hotelImage: imageUrl,
+      sections, // ✅ store sections
+      hotelImage: imageUrl
     });
 
     res.status(201).json({
       success: true,
       data: {
         _id: newHotel._id,
-        hotelName: newHotel.hotelName,
-      },
+        hotelName: newHotel.hotelName
+      }
     });
 
   } catch (error) {
@@ -127,7 +152,8 @@ app.post("/api/hotel/login", async (req, res) => {
         address: hotel.address,
         city: hotel.city,
         state: hotel.state,
-        tableCount: hotel.tableCount,
+        sections: hotel.sections,
+        hotelType: hotel.hotelType,
         hotelImage: hotel.hotelImage,
       },
     });
@@ -164,8 +190,8 @@ app.put("/api/hotel/:id", upload.single("hotelImage"), async (req, res) => {
   try {
     const updateData = { ...req.body };
 
-    if (updateData.tableCount) {
-      updateData.tableCount = Number(updateData.tableCount);
+    if (updateData.sections) {
+      updateData.sections = JSON.parse(updateData.sections);
     }
 
     if (req.file) {
@@ -245,6 +271,14 @@ app.delete("/api/food/:id", async (req, res) => {
 app.put("/api/food/:id/toggle", async (req, res) => {
   try {
     const food = await Food.findById(req.params.id);
+
+    if (!food) {
+      return res.status(404).json({
+        success: false,
+        message: "Food not found"
+      })
+    }
+
     food.available = !food.available;
     await food.save();
 
@@ -275,6 +309,7 @@ app.post("/api/cart", async (req, res) => {
 // PLACE ORDER
 app.post("/api/bookings/place-order", async (req, res) => {
   try {
+
     const { hotelId, tableNumber, items } = req.body;
 
     if (!hotelId || !tableNumber || !items?.length) {
@@ -289,11 +324,14 @@ app.post("/api/bookings/place-order", async (req, res) => {
       0
     );
 
-    // ✅ ALWAYS CREATE NEW BOOKING
     const newBooking = await Booking.create({
       hotelId,
-      tableNumber: Number(tableNumber),
-      orders: items,
+      tableNumber,
+      orders: items.map(item => ({
+        ...item,
+        orderedAt: new Date(),
+        delivered: false
+      })),
       totalAmount,
       status: "active"
     });
@@ -314,7 +352,7 @@ app.get("/api/bookings/:hotelId", async (req, res) => {
       hotelId: req.params.hotelId,
       status: "active"
     })
-    .sort({ createdAt: -1 }); // ✅ NEWEST FIRST
+      .sort({ createdAt: -1 }); // ✅ NEWEST FIRST
 
     res.json({ success: true, data: bookings });
 
@@ -492,6 +530,129 @@ app.put("/api/bookings/deliver-item/:bookingId", async (req, res) => {
   } catch (error) {
     res.status(500).json({ success: false });
   }
+});
+
+app.post("/api/bookings/manual-add", async (req, res) => {
+
+  try {
+
+    const { hotelId, tableNumber, items } = req.body;
+
+    if (!hotelId || !tableNumber || !items || !items.length) {
+      return res.status(400).json({
+        success: false,
+        message: "Missing required data"
+      });
+    }
+
+    let booking = await Booking.findOne({
+      hotelId,
+      tableNumber,
+      status: "active"
+    });
+
+    if (!booking) {
+
+      booking = new Booking({
+        hotelId,
+        tableNumber,
+        orders: [],
+        totalAmount: 0,
+        status: "active"
+      });
+
+    }
+
+    items.forEach((item) => {
+
+      booking.orders.push({
+        foodId: item.foodId,
+        title: item.title,
+        price: Number(item.price),
+        quantity: Number(item.quantity),
+        delivered: false,
+        orderedAt: new Date()
+      });
+
+      booking.totalAmount += Number(item.price) * Number(item.quantity);
+
+    });
+
+    await booking.save();
+
+    res.json({ success: true, data: booking });
+
+  } catch (error) {
+
+    console.log("Manual Add Error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+
+  }
+
+});
+
+app.put("/api/bookings/shift-table", async (req, res) => {
+
+  try {
+
+    let { hotelId, fromTable, toTable } = req.body;
+
+    if (!hotelId || !fromTable || !toTable) {
+      return res.json({ success: false, message: "Missing data" });
+    }
+
+    // make case insensitive
+    fromTable = fromTable.toUpperCase();
+    toTable = toTable.toUpperCase();
+
+    // check if target table already has active booking
+    const existing = await Booking.findOne({
+      hotelId,
+      tableNumber: toTable,
+      status: "active"
+    });
+
+    if (existing) {
+      return res.json({
+        success: false,
+        message: "Table already occupied"
+      });
+    }
+
+    const bookings = await Booking.find({
+      hotelId,
+      tableNumber: fromTable,
+      status: "active"
+    });
+
+    if (bookings.length === 0) {
+      return res.json({
+        success: false,
+        message: "No active orders"
+      });
+    }
+
+    for (let booking of bookings) {
+      booking.tableNumber = toTable;
+      await booking.save();
+    }
+
+    res.json({
+      success: true,
+      message: "Orders shifted successfully"
+    });
+
+  } catch (err) {
+
+    console.error(err);
+    res.json({ success: false });
+
+  }
+
 });
 
 /* =================================
