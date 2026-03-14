@@ -8,9 +8,9 @@ import { v2 as cloudinary } from "cloudinary";
 import bcrypt from "bcryptjs";
 
 import { Food } from "./models/Food.js";
-import { Cart } from "./models/CartSchema.js";
 import { Hotel } from "./models/Hotel.js";
 import Booking from "./models/Booking.js";
+import Order from "./models/Order.js";
 
 dotenv.config();
 
@@ -289,20 +289,6 @@ app.put("/api/food/:id/toggle", async (req, res) => {
 });
 
 /* =================================
-   ✅ CART ROUTE
-================================= */
-
-app.post("/api/cart", async (req, res) => {
-  try {
-    const { table, items } = req.body;
-    const data = await Cart.create({ table, items });
-    res.json({ success: true, data });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-/* =================================
    ✅ BOOKING ROUTES
 ================================= */
 
@@ -346,29 +332,60 @@ app.post("/api/bookings/place-order", async (req, res) => {
 
 
 // GET BOOKINGS BY HOTEL
-app.get("/api/bookings/:hotelId", async (req, res) => {
+app.get("/api/bookings/hotel/:hotelId", async (req, res) => {
   try {
+
     const bookings = await Booking.find({
       hotelId: req.params.hotelId,
       status: "active"
-    })
-      .sort({ createdAt: -1 }); // ✅ NEWEST FIRST
+    }).sort({ createdAt: -1 });
 
-    res.json({ success: true, data: bookings });
+    res.json({
+      success: true,
+      data: bookings
+    });
 
   } catch (error) {
     res.status(500).json({ success: false });
   }
 });
 
-app.get("/api/bookings/:hotelId/:tableNumber", async (req, res) => {
-  const booking = await Booking.findOne({
-    hotelId: req.params.hotelId,
-    tableNumber: req.params.tableNumber,
-    status: "active"
-  });
+app.get("/api/bookings/table/:hotelId/:tableNumber", async (req, res) => {
+  try {
 
-  res.json({ success: true, data: booking });
+    const bookings = await Booking.find({
+      hotelId: req.params.hotelId,
+      tableNumber: req.params.tableNumber,
+      status: "active"
+    }).sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: bookings
+    });
+
+  } catch (error) {
+    res.status(500).json({ success: false });
+  }
+});
+
+app.get("/api/bookings/kot/:hotelId", async (req, res) => {
+  try {
+
+    const bookings = await Booking.find({
+      hotelId: req.params.hotelId,
+      status: "active",
+      kotSent: true
+    }).sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      data: bookings
+    });
+
+  } catch (error) {
+    res.status(500).json({ success: false });
+  }
 });
 
 app.put("/api/bookings/remove-item/:bookingId", async (req, res) => {
@@ -504,8 +521,10 @@ app.put("/api/bookings/update-quantity/:bookingId", async (req, res) => {
 });
 
 app.put("/api/bookings/deliver-item/:bookingId", async (req, res) => {
+
   try {
-    const { foodId } = req.body;
+
+    const { orderItemId } = req.body;
 
     const booking = await Booking.findById(req.params.bookingId);
 
@@ -513,23 +532,34 @@ app.put("/api/bookings/deliver-item/:bookingId", async (req, res) => {
       return res.status(404).json({ success: false });
     }
 
-    const item = booking.orders.find(
-      (o) => String(o.foodId) === String(foodId)
-    );
+    const item = booking.orders.id(orderItemId);
 
     if (!item) {
-      return res.status(404).json({ success: false });
+      return res.status(404).json({
+        success: false,
+        message: "Order item not found"
+      });
     }
 
     item.delivered = true;
 
     await booking.save();
 
-    res.json({ success: true, data: booking });
+    res.json({
+      success: true,
+      data: booking
+    });
 
   } catch (error) {
-    res.status(500).json({ success: false });
+
+    console.error(error);
+
+    res.status(500).json({
+      success: false
+    });
+
   }
+
 });
 
 app.post("/api/bookings/manual-add", async (req, res) => {
@@ -650,6 +680,108 @@ app.put("/api/bookings/shift-table", async (req, res) => {
 
     console.error(err);
     res.json({ success: false });
+
+  }
+
+});
+
+app.put("/api/bookings/send-kot/:bookingId", async (req, res) => {
+
+  try {
+
+    const booking = await Booking.findById(req.params.bookingId);
+
+    if (!booking) {
+      return res.json({ success: false });
+    }
+
+    booking.kotSent = true;
+
+    await booking.save();
+
+    res.json({
+      success: true,
+      data: booking
+    });
+
+  } catch (err) {
+
+    console.error(err);
+    res.json({ success: false });
+
+  }
+
+});
+
+app.post("/api/orders/complete-table", async (req, res) => {
+
+  try {
+
+    const { hotelId, tableNumber, paymentMethod } = req.body;
+
+    const bookings = await Booking.find({
+      hotelId,
+      tableNumber,
+      status: "active"
+    });
+
+    if (!bookings.length) {
+      return res.json({ success: false, message: "No orders found" });
+    }
+
+    // collect all items
+    const items = bookings.flatMap(b => b.orders);
+
+    let subtotal = 0;
+
+    items.forEach(item => {
+      subtotal += item.price * item.quantity;
+    });
+
+    const gst = subtotal * 0.05;
+    const totalAmount = subtotal + gst;
+
+    // generate bill number
+    const billNo = "BILL-" + Date.now();
+
+    const order = await Order.create({
+
+      hotelId,
+      billNo,
+
+      items: items.map(i => ({
+        foodId: i.foodId,
+        title: i.title,
+        price: i.price,
+        quantity: i.quantity
+      })),
+
+      subtotal,
+      gst,
+      totalAmount,
+      paymentMethod
+
+    });
+
+    // delete bookings after bill
+    await Booking.deleteMany({
+      hotelId,
+      tableNumber
+    });
+
+    res.json({
+      success: true,
+      order,
+      tableNumber
+    });
+
+  } catch (error) {
+
+    console.error(error);
+
+    res.status(500).json({
+      success: false
+    });
 
   }
 
