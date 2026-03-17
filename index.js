@@ -11,6 +11,7 @@ import { Food } from "./models/Food.js";
 import { Hotel } from "./models/Hotel.js";
 import Booking from "./models/Booking.js";
 import Order from "./models/Order.js";
+import Bill from "./models/Bill.js";
 
 dotenv.config();
 
@@ -18,21 +19,21 @@ const app = express();
 const port = process.env.PORT || 1000;
 
 /* =================================
-   ✅ MIDDLEWARE
+  ✅ MIDDLEWARE
 ================================= */
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 /* =================================
-   ✅ DATABASE CONNECTION
+  ✅ DATABASE CONNECTION
 ================================= */
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("✅ MongoDB Connected"))
   .catch(err => console.log("❌ MongoDB Error:", err.message));
 
 /* =================================
-   ✅ CLOUDINARY CONFIG
+  ✅ CLOUDINARY CONFIG
 ================================= */
 cloudinary.config({
   cloud_name: process.env.CLOUD_NAME,
@@ -41,25 +42,35 @@ cloudinary.config({
 });
 
 /* =================================
-   ✅ MULTER CONFIG
+  ✅ MULTER CONFIG
 ================================= */
 const upload = multer({ dest: "uploads/" });
 
 /* =================================
-   ✅ TEST ROUTE
+  ✅ TEST ROUTE
 ================================= */
 app.get("/", (req, res) => {
   res.json({ message: "🔥 Server running successfully..." });
 });
 
 /* =================================
-   ✅ HOTEL ROUTES
+  ✅ HOTEL ROUTES
 ================================= */
 
 // REGISTER HOTEL
 app.post("/api/hotel/signup", upload.single("hotelImage"), async (req, res) => {
   try {
-    const { hotelName, email, password, address, city, state, hotelType } = req.body;
+    const {
+      hotelName,
+      email,
+      password,
+      address,
+      city,
+      state,
+      hotelType,
+      orderCount,
+      roomCount
+    } = req.body;
 
     let sections = [];
 
@@ -78,6 +89,13 @@ app.post("/api/hotel/signup", upload.single("hotelImage"), async (req, res) => {
       return res.status(400).json({
         success: false,
         message: "Required fields missing"
+      });
+    }
+
+    if (hotelType === "hotel_with_lodging" && (!roomCount || roomCount < 1)) {
+      return res.status(400).json({
+        success: false,
+        message: "Room count required for lodging hotels"
       });
     }
 
@@ -111,7 +129,11 @@ app.post("/api/hotel/signup", upload.single("hotelImage"), async (req, res) => {
       address,
       city,
       state,
-      sections, // ✅ store sections
+      sections,
+
+      orderCount: orderCount || 0,
+      roomCount: hotelType === "hotel_with_lodging" ? roomCount : undefined,
+
       hotelImage: imageUrl
     });
 
@@ -154,6 +176,8 @@ app.post("/api/hotel/login", async (req, res) => {
         state: hotel.state,
         sections: hotel.sections,
         hotelType: hotel.hotelType,
+        roomCount: hotel.roomCount,
+        orderCount: hotel.orderCount,
         hotelImage: hotel.hotelImage,
       },
     });
@@ -214,7 +238,7 @@ app.put("/api/hotel/:id", upload.single("hotelImage"), async (req, res) => {
 });
 
 /* =================================
-   ✅ FOOD ROUTES
+  ✅ FOOD ROUTES
 ================================= */
 
 // CREATE FOOD
@@ -289,14 +313,14 @@ app.put("/api/food/:id/toggle", async (req, res) => {
 });
 
 /* =================================
-   ✅ BOOKING ROUTES
+  ✅ BOOKING ROUTES
 ================================= */
 
 // PLACE ORDER
 app.post("/api/bookings/place-order", async (req, res) => {
   try {
 
-    const { hotelId, tableNumber, items } = req.body;
+    const { hotelId, tableNumber, orderType, items } = req.body;
 
     if (!hotelId || !tableNumber || !items?.length) {
       return res.status(400).json({
@@ -305,28 +329,85 @@ app.post("/api/bookings/place-order", async (req, res) => {
       });
     }
 
-    const totalAmount = items.reduce(
-      (sum, item) => sum + Number(item.price) * Number(item.quantity),
-      0
-    );
+    let booking;
 
-    const newBooking = await Booking.create({
-      hotelId,
-      tableNumber,
-      orders: items.map(item => ({
-        ...item,
-        orderedAt: new Date(),
-        delivered: false
-      })),
-      totalAmount,
-      status: "active"
+    // ✅ ROOM ORDER
+    if (orderType === "room") {
+
+      booking = await Booking.findOne({
+        hotelId,
+        number: tableNumber,
+        orderType: "room",
+        status: "active"
+      });
+
+      if (!booking) {
+        return res.json({
+          success: false,
+          message: "Room not logged in"
+        });
+      }
+
+    }
+
+    // ✅ TABLE ORDER
+    else {
+
+      booking = await Booking.findOne({
+        hotelId,
+        number: tableNumber,
+        orderType: "table",
+        status: "active"
+      });
+
+      if (!booking) {
+        booking = new Booking({
+          hotelId,
+          orderType: "table",
+          number: tableNumber,
+          orders: [],
+          totalAmount: 0,
+          status: "active"
+        });
+      }
+
+    }
+
+    // ✅ ADD ITEMS
+    items.forEach(item => {
+
+      const price = Number(item.price);
+      const qty = Number(item.quantity);
+
+      booking.orders.push({
+        foodId: item.foodId,
+        title: item.title,
+        price: price,
+        quantity: qty,
+        delivered: false,
+        orderedAt: new Date()
+      });
+
+      booking.totalAmount += price * qty;
+
     });
 
-    res.json({ success: true, data: newBooking });
+    await booking.save();
+
+    res.json({
+      success: true,
+      data: booking
+    });
 
   } catch (error) {
+
     console.log("Booking Error:", error);
-    res.status(500).json({ success: false, message: error.message });
+
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+
   }
 });
 
@@ -355,9 +436,10 @@ app.get("/api/bookings/table/:hotelId/:tableNumber", async (req, res) => {
 
     const bookings = await Booking.find({
       hotelId: req.params.hotelId,
-      tableNumber: req.params.tableNumber,
+      number: req.params.tableNumber,
+      orderType: "table",
       status: "active"
-    }).sort({ createdAt: -1 });
+    });
 
     res.json({
       success: true,
@@ -566,47 +648,51 @@ app.post("/api/bookings/manual-add", async (req, res) => {
 
   try {
 
-    const { hotelId, tableNumber, items } = req.body;
+    const { hotelId, tableNumber, roomNumber, orderType, items } = req.body;
 
-    if (!hotelId || !tableNumber || !items || !items.length) {
-      return res.status(400).json({
-        success: false,
-        message: "Missing required data"
-      });
-    }
+    const number = orderType === "room" ? roomNumber : tableNumber;
 
     let booking = await Booking.findOne({
       hotelId,
-      tableNumber,
+      number,
+      orderType,
       status: "active"
     });
 
     if (!booking) {
 
       booking = new Booking({
+
         hotelId,
-        tableNumber,
+
+        orderType,
+        number,
+
         orders: [],
         totalAmount: 0,
         status: "active"
+
       });
 
     }
 
     items.forEach((item) => {
 
+      const price = Number(item.price) || 0;
+      const qty = Number(item.quantity) || 0;
+      
       booking.orders.push({
-        foodId: item.foodId,
-        title: item.title,
-        price: Number(item.price),
-        quantity: Number(item.quantity),
-        delivered: false,
-        orderedAt: new Date()
+      foodId: item.foodId,
+      title: item.title,
+      price: price,
+      quantity: qty,
+      delivered: false,
+      orderedAt: new Date()
       });
-
-      booking.totalAmount += Number(item.price) * Number(item.quantity);
-
-    });
+      
+      booking.totalAmount = Number(booking.totalAmount || 0) + (price * qty);
+      
+      });
 
     await booking.save();
 
@@ -655,7 +741,8 @@ app.put("/api/bookings/shift-table", async (req, res) => {
 
     const bookings = await Booking.find({
       hotelId,
-      tableNumber: fromTable,
+      number: fromTable,
+      orderType: "table",
       status: "active"
     });
 
@@ -667,7 +754,7 @@ app.put("/api/bookings/shift-table", async (req, res) => {
     }
 
     for (let booking of bookings) {
-      booking.tableNumber = toTable;
+      booking.number = toTable;
       await booking.save();
     }
 
@@ -721,7 +808,8 @@ app.post("/api/orders/complete-table", async (req, res) => {
 
     const bookings = await Booking.find({
       hotelId,
-      tableNumber,
+      number: tableNumber,
+      orderType: "table",
       status: "active"
     });
 
@@ -766,7 +854,8 @@ app.post("/api/orders/complete-table", async (req, res) => {
     // delete bookings after bill
     await Booking.deleteMany({
       hotelId,
-      tableNumber
+      number: tableNumber,
+      orderType: "table"
     });
 
     res.json({
@@ -784,11 +873,202 @@ app.post("/api/orders/complete-table", async (req, res) => {
     });
 
   }
+});
+
+app.get("/api/rooms/hotel/:hotelId", async (req, res) => {
+
+  const bookings = await Booking.find({
+    hotelId: req.params.hotelId,
+    orderType: "room",
+    status: "active"
+  }).sort({ createdAt: -1 });
+
+  res.json({
+    success: true,
+    data: bookings
+  });
+
+});
+
+app.post("/api/bookings/room-login", async (req, res) => {
+
+  const { hotelId, roomNumber, customerName, age, personCount } = req.body;
+
+  try {
+
+    const room = new Booking({
+
+      hotelId,
+      number: roomNumber,
+      customerName,
+      age,
+      personCount,
+    
+      orderType: "room",
+      status: "active",
+    
+      orders: [],        
+      totalAmount: 0,      
+    
+      checkInTime: new Date()
+    
+    });
+
+    await room.save();
+
+    res.json({ success: true, data: room });
+
+  } catch (err) {
+    res.json({ success: false });
+  }
+
+});
+
+
+app.post("/api/bookings/room-checkout", async (req, res) => {
+
+  const { hotelId, roomNumber, paymentMethod } = req.body;
+
+  try {
+
+    const bookings = await Booking.find({
+      hotelId,
+      number: roomNumber,
+      orderType: "room",
+      status: "active"
+    });
+
+    if (bookings.length === 0) {
+      return res.json({ success: false });
+    }
+
+    const loginBooking = bookings.find(b => b.checkInTime);
+
+    const checkoutTime = new Date();
+    const checkInTime = new Date(loginBooking.checkInTime);
+
+    const hours = (checkoutTime - checkInTime) / (1000 * 60 * 60);
+    const stayDays = Math.max(1, Math.ceil(hours / 24));
+
+    const roomRate = 400;
+    const roomTotal = stayDays * roomRate;
+
+    let foodItems = [];
+    let foodTotal = 0;
+
+    bookings.forEach(b => {
+      (b.orders || []).forEach(i => {
+        foodItems.push(i);
+        foodTotal += Number(i.price) * Number(i.quantity);
+      });
+    });
+
+    const gst = Number(((roomTotal + foodTotal) * 0.05).toFixed(2));
+    const total = roomTotal + foodTotal + gst;
+
+    const lastBill = await Bill.findOne({ hotelId }).sort({ billNo: -1 });
+    const billNo = lastBill ? lastBill.billNo + 1 : 1;
+
+    const bill = new Bill({
+
+      hotelId,
+      billNo,
+      roomNumber,
+
+      customerName: loginBooking.customerName,
+      personCount: loginBooking.personCount,
+
+      checkInTime,
+      checkOutTime: checkoutTime,
+
+      stayDays,
+      roomTotal,
+      foodTotal,
+      gst,
+      total,
+
+      paymentMethod,
+
+      foodItems
+
+    });
+
+    await bill.save();
+
+    await Booking.deleteMany({
+      hotelId,
+      number: roomNumber,
+      orderType: "room"
+    });
+
+    res.json({ success: true, bill });
+
+  } catch (err) {
+    console.log(err);
+    res.json({ success: false });
+  }
+
+});
+
+app.post("/api/bookings/generate-room-bill", async (req, res) => {
+
+  const { hotelId, roomNumber } = req.body;
+
+  try {
+
+    const booking = await Booking.findOne({
+      hotelId,
+      number: roomNumber,
+      orderType: "room",
+      status: "active"
+    });
+
+    if (!booking) {
+      return res.json({ success: false });
+    }
+
+    const checkoutTime = new Date();
+    const checkInTime = new Date(booking.checkInTime);
+
+    const hours = (checkoutTime - checkInTime) / (1000 * 60 * 60);
+    const stayDays = Math.max(1, Math.ceil(hours / 24));
+
+    const roomRate = 400;
+    const roomTotal = stayDays * roomRate;
+
+    let foodTotal = (booking.orders || []).reduce(
+      (sum, i) => sum + Number(i.price) * Number(i.quantity),
+      0
+    );
+
+    const gst = Number(((roomTotal + foodTotal) * 0.05).toFixed(2));
+    const total = roomTotal + foodTotal + gst;
+
+    const bill = {
+      roomNumber,
+      customerName: booking.customerName,
+      personCount: booking.personCount,
+      checkInTime,
+      checkOutTime: checkoutTime,
+      stayDays,
+      roomTotal,
+      foodTotal,
+      gst,
+      total,
+      foodItems: booking.orders
+    };
+
+    res.json({ success: true, bill });
+
+  } catch (err) {
+    console.log(err);
+    res.json({ success: false });
+  }
 
 });
 
 /* =================================
-   ✅ START SERVER (ALWAYS LAST)
+  ✅ START SERVER (ALWAYS LAST)
 ================================= */
 app.listen(port, () => {
   console.log(`🚀 Server running on port ${port}`);

@@ -1,4 +1,3 @@
-
 import mongoose from "mongoose";
 
 const sectionSchema = new mongoose.Schema({
@@ -15,11 +14,23 @@ const sectionSchema = new mongoose.Schema({
 });
 
 const hotelSchema = new mongoose.Schema({
-    hotelName: { type: String, required: true, trim: true },
+    hotelName: { 
+        type: String, 
+        required: true, 
+        trim: true 
+    },
 
-    email: { type: String, required: true, unique: true, lowercase: true },
+    email: { 
+        type: String, 
+        required: true, 
+        unique: true, 
+        lowercase: true 
+    },
 
-    password: { type: String, required: true },
+    password: { 
+        type: String, 
+        required: true 
+    },
 
     hotelType: {
         type: String,
@@ -27,15 +38,42 @@ const hotelSchema = new mongoose.Schema({
         enum: ["hotel_only", "hotel_with_lodging"]
     },
 
-    address: { type: String, required: true },
+    address: { 
+        type: String, 
+        required: true 
+    },
 
-    city: { type: String, required: true },
+    city: { 
+        type: String, 
+        required: true 
+    },
 
-    state: { type: String, required: true },
+    state: { 
+        type: String, 
+        required: true 
+    },
 
-    sections: [sectionSchema],  
+    sections: [sectionSchema],
 
-    hotelImage: { type: String }
+    // 🔹 Order count (not required)
+    orderCount: {
+        type: Number,
+        default: 0,
+        min: 0
+    },
+
+    // 🔹 Room count (required only if hotelType = hotel_with_lodging)
+    roomCount: {
+        type: Number,
+        min: 1,
+        required: function () {
+            return this.hotelType === "hotel_with_lodging";
+        }
+    },
+
+    hotelImage: { 
+        type: String 
+    }
 
 }, { timestamps: true });
 

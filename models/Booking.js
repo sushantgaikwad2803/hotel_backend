@@ -5,53 +5,40 @@ const orderSchema = new mongoose.Schema({
   title: String,
   price: Number,
   quantity: Number,
-  delivered: {
-    type: Boolean,
-    default: false
-  },
-  orderedAt: {
-    type: Date,
-    default: Date.now
-  }
+  delivered: Boolean,
+  orderedAt: Date
 });
 
-const bookingSchema = new mongoose.Schema(
-{
-  hotelId: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: "Hotel",
-    required: true
+const bookingSchema = new mongoose.Schema({
+
+  hotelId:{
+    type:mongoose.Schema.Types.ObjectId,
+    ref:"Hotel"
   },
 
-  tableNumber: {
-    type: String,
-    required: true
+  orderType:String,
+  number:String,
+
+  customerName:String,
+  age:Number,
+  personCount:Number,
+
+  checkInTime:Date,
+
+  orders:[orderSchema],
+
+  totalAmount:Number,
+
+  status:{
+    type:String,
+    default:"active"
   },
 
-  orders: [orderSchema],
-
-  totalAmount: Number,
-
-  status: {
-    type: String,
-    default: "active"
-  },
-
-  kotSent: {
-    type: Boolean,
-    default: false
+  kotSent:{
+    type:Boolean,
+    default:false
   }
-},
-{ timestamps: true }
-);
 
-
-
-// ✅ INDEXES (important for performance)
-bookingSchema.index({ hotelId: 1, status: 1 });
-bookingSchema.index({ hotelId: 1, tableNumber: 1 });
-bookingSchema.index({ hotelId: 1, kotSent: 1 });
-
-
+},{timestamps:true});
 
 export default mongoose.model("Booking", bookingSchema);
