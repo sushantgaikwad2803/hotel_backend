@@ -416,10 +416,22 @@ app.post("/api/bookings/place-order", async (req, res) => {
 app.get("/api/bookings/hotel/:hotelId", async (req, res) => {
   try {
 
-    const bookings = await Booking.find({
+    const { type } = req.query;
+
+    let filter = {
       hotelId: req.params.hotelId,
       status: "active"
-    }).sort({ createdAt: -1 });
+    };
+
+    if (type === "room") {
+      filter.orderType = "room";
+    }
+
+    if (type === "table") {
+      filter.orderType = "table";
+    }
+
+    const bookings = await Booking.find(filter).sort({ createdAt: -1 });
 
     res.json({
       success: true,
@@ -728,7 +740,8 @@ app.put("/api/bookings/shift-table", async (req, res) => {
     // check if target table already has active booking
     const existing = await Booking.findOne({
       hotelId,
-      tableNumber: toTable,
+      number: toTable,
+      orderType: "table",
       status: "active"
     });
 
@@ -1065,6 +1078,88 @@ app.post("/api/bookings/generate-room-bill", async (req, res) => {
     res.json({ success: false });
   }
 
+});
+
+app.put("/api/bookings/shift-to-room", async (req, res) => {
+  try {
+
+    const { hotelId, tableNumber, roomNumber } = req.body;
+
+    if (!hotelId || !tableNumber || !roomNumber) {
+      return res.json({ success: false, message: "Missing data" });
+    }
+
+    // ✅ FIND TABLE BOOKINGS
+    const tableBookings = await Booking.find({
+      hotelId,
+      number: tableNumber,
+      orderType: "table",
+      status: "active"
+    });
+
+    if (tableBookings.length === 0) {
+      return res.json({
+        success: false,
+        message: "No table orders found"
+      });
+    }
+
+    // ✅ FIND ROOM (MUST BE LOGGED IN)
+    const roomBooking = await Booking.findOne({
+      hotelId,
+      number: roomNumber,
+      orderType: "room",
+      status: "active",
+      checkInTime: { $exists: true }
+    });
+
+    if (!roomBooking) {
+      return res.json({
+        success: false,
+        message: "Room not logged in"
+      });
+    }
+
+    // ✅ MOVE ITEMS
+    tableBookings.forEach(tb => {
+      tb.orders.forEach(item => {
+        roomBooking.orders.push({
+          foodId: item.foodId,
+          title: item.title,
+          price: item.price,
+          quantity: item.quantity,
+          delivered: item.delivered,
+          orderedAt: item.orderedAt
+        });
+      });
+
+      roomBooking.totalAmount += tb.totalAmount || 0;
+    });
+
+    await roomBooking.save();
+
+    // ✅ COMPLETE TABLE
+    await Booking.updateMany(
+      {
+        hotelId,
+        number: tableNumber,
+        orderType: "table",
+        status: "active"
+      },
+      {
+        $set: { status: "completed" }
+      }
+    );
+
+    res.json({
+      success: true,
+      message: "Shifted to room successfully"
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.json({ success: false });
+  }
 });
 
 /* =================================
